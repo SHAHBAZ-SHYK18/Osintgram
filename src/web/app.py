@@ -229,6 +229,17 @@ app = FastAPI(title="Osintgram Web")
 # elsewhere doesn't strictly need it, but calling it is always harmless.
 # Localhost only, a few lines.
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "::1", "0.0.0.0"}
+# Extra hostnames the check should accept, comma-separated
+# (OSINTGRAM_TRUSTED_HOSTS) - for the cases where "local" isn't a localhost
+# URL: a tunnel, a reverse proxy, or a hosted dev sandbox that serves this
+# same process through its own domain. Empty by default, so a plain install
+# keeps refusing every non-localhost Host header. Only add a hostname you
+# control and that reaches nothing but your own instance.
+_TRUSTED_HOSTS = {
+    host.strip().lower()
+    for host in os.getenv("OSINTGRAM_TRUSTED_HOSTS", "").split(",")
+    if host.strip()
+}
 
 
 def _is_local_host(value: str) -> bool:
@@ -241,7 +252,7 @@ def _is_local_host(value: str) -> bool:
         host = host.rsplit(":", 1)[0]
     elif host.startswith("["):
         host = host.split("]", 1)[0] + "]"
-    return host in _LOCAL_HOSTS
+    return host in _LOCAL_HOSTS or host in _TRUSTED_HOSTS
 
 
 def _require_local_origin(request: Request) -> None:

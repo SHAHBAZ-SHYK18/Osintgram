@@ -105,3 +105,20 @@ def test_local_hosts_are_accepted(client):
         r = api.post("/api/token", json={"token": "hik_valid_key_0000", "remember": False},
                      headers={"host": host, "origin": f"http://{host}"})
         assert r.status_code == 200, host
+
+
+def test_an_opted_in_hostname_is_accepted(client, monkeypatch):
+    """Serving the same instance through a tunnel or a hosted sandbox is an
+    explicit choice: OSINTGRAM_TRUSTED_HOSTS adds exactly the hostname you
+    name, and nothing else."""
+    api, _ = client
+    monkeypatch.setenv("OSINTGRAM_TRUSTED_HOSTS", "sandbox.example")
+    monkeypatch.setattr(appmod, "_TRUSTED_HOSTS", {"sandbox.example"})
+    for host in ("sandbox.example", "sandbox.example:8000"):
+        r = api.post("/api/token", json={"token": "hik_valid_key_0000", "remember": False},
+                     headers={"host": host, "origin": f"https://{host}"})
+        assert r.status_code == 200, host
+    # An unlisted hostname is still refused, with or without a port.
+    for headers in ({"host": "attacker.example"}, {"host": "sandbox.example.evil.test"}):
+        assert api.post("/api/token", json={"token": "hik_valid_key_0000"},
+                        headers=headers).status_code == 403

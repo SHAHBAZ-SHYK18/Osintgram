@@ -527,6 +527,27 @@ All optional; everything has a working default.
 Auto-selection prefers HikerAPI when a key is configured, and falls back to
 instagrapi when a saved session exists.
 
+### Host allowlist
+
+| Variable | Default | What it does |
+|---|---|---|
+| `OSINTGRAM_TRUSTED_HOSTS` | — | Extra hostnames to accept, comma-separated |
+
+The key and dossier endpoints refuse any `Host` they don't recognise, so that
+a page on another site can't reach them through your browser (DNS rebinding).
+Only `localhost`, `127.0.0.1` and `::1` are accepted by default. If you reach
+your own instance through something else — a tunnel, a reverse proxy, or a
+hosted dev sandbox that proxies the port under its own domain — name that
+hostname here, exactly:
+
+```bash
+export OSINTGRAM_TRUSTED_HOSTS=sandbox.example,my-tunnel.example
+```
+
+Only add a hostname you control that reaches nothing but your own instance.
+It's still an unauthenticated app: anything that hostname can reach, so can
+anyone who can reach the hostname.
+
 ### Cost and reliability
 
 | Variable | Default | What it does |
