@@ -586,6 +586,22 @@ variable instead.
 **"Key rejected by HikerAPI"** — the key was checked before being accepted
 and HikerAPI refused it. The message is HikerAPI's own; nothing was saved.
 
+**"Could not reach HikerAPI (ConnectError: …)"** — the key was never judged:
+the request to `api.hikerapi.com` didn't get out. A `TLS/SSL connection has
+been closed (EOF)` behind it means something cut the connection before HikerAPI
+answered — most often a sandbox or container with no outbound HTTPS, a
+corporate proxy, or a firewall. Check, in this order:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://api.hikerapi.com   # 401/403 = reachable
+echo "${HTTPS_PROXY:-no proxy set}"
+```
+
+A 401 or 403 there means the network is fine and the problem really is the
+key; a hang or an SSL error means it isn't. Behind a proxy, export
+`HTTPS_PROXY` (and `HTTP_PROXY`) before starting the server, since the
+HikerAPI client picks them up from the environment.
+
 **"The key can only be set from localhost" (403)** — the key endpoints only
 answer to `127.0.0.1`. Reach the page at `http://127.0.0.1:8000`, not through
 another hostname.

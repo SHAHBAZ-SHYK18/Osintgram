@@ -581,3 +581,38 @@ def test_account_about_needs_a_target():
     svc = OsintgramService(None, SearchClient())
     with pytest.raises(OsintServiceError):
         svc.get_account_about()
+
+
+def test_a_network_failure_is_reported_as_unreachable_not_as_a_bad_key():
+    """The key is never the problem when the host is unreachable, and the raw
+    OpenSSL line ("TLS/SSL connection has been closed") is not an answer
+    anyone can act on. The service must say what happened and what to check."""
+
+    class Unreachable:
+        def user_by_username_v2(self, username, **k):
+            raise httpx.ConnectError("TLS/SSL connection has been closed (EOF)")
+
+    with pytest.raises(svcmod.HikerAPIError) as err:
+        OsintgramService("someone", Unreachable())
+    message = str(err.value)
+    assert "Could not reach HikerAPI" in message
+    assert "not a rejected key" in message
+    assert "api.hikerapi.com" in message
+
+
+def test_a_network_failure_verifying_the_key_says_the_same_thing(monkeypatch):
+    monkeypatch.setattr(svcmod, "AppClient", lambda token: _UnreachableClient())
+    with pytest.raises(svcmod.HikerAPIError) as err:
+        svcmod.check_hiker_token("hik_whatever_0000")
+    assert "Could not reach HikerAPI" in str(err.value)
+
+
+class _UnreachableClient:
+    """Stands in for hikerapi's Client: _request blows up like httpx does when
+    outbound HTTPS is blocked (no such error reaches HikerAPI itself)."""
+
+    def __init__(self):
+        self._client = type("_C", (), {"close": lambda self: None})()
+
+    def _request(self, *args, **kwargs):
+        raise httpx.ConnectError("TLS/SSL connection has been closed (EOF)")

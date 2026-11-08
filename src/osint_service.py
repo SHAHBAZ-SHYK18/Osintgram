@@ -189,6 +189,23 @@ def _retry_delay(attempt: int) -> float:
     return RETRY_BASE_DELAY_SECONDS * attempt
 
 
+def _unreachable_message(error) -> str:
+    """A transport failure is not HikerAPI rejecting the key.
+
+    Handing the raw httpx text straight back ("TLS/SSL connection has been
+    closed (EOF)") makes every one of these look like a bad key, hidden behind
+    a line of OpenSSL - the one thing it never is. Say what actually happened,
+    and what to check, in the same order the user can check it.
+    """
+    return (
+        f"Could not reach HikerAPI ({type(error).__name__}: {error}). "
+        "This is a network problem, not a rejected key: check that this machine "
+        "has outbound HTTPS to api.hikerapi.com, and that no proxy or firewall is "
+        "intercepting it. If you run behind a proxy, set HTTPS_PROXY before "
+        "starting the server."
+    )
+
+
 def _error_detail(result) -> Optional[str]:
     """The backend's error message, if this response is an error at all."""
     if isinstance(result, dict):
@@ -381,6 +398,10 @@ class OsintgramService:
     def _fetch_user(self, username: str) -> dict:
         try:
             data = self.api.user_by_username_v2(username)
+        except _TRANSIENT_EXCEPTIONS as e:
+            # A failed search and a failed key check are the same problem
+            # underneath, and must read the same way: not a bad key.
+            raise HikerAPIError(_unreachable_message(e)) from e
         except Exception as e:
             raise HikerAPIError(str(e)) from e
         if "error" in data:
@@ -1377,6 +1398,8 @@ def check_hiker_token(token: str) -> dict:
     client = AppClient(token=(token or "").strip())
     try:
         data = client._request("get", "/sys/balance")
+    except _TRANSIENT_EXCEPTIONS as e:
+        raise HikerAPIError(_unreachable_message(e)) from e
     except Exception as e:
         raise HikerAPIError(str(e)) from e
     finally:
@@ -1408,6 +1431,8 @@ def hiker_balance() -> Optional[dict]:
     client = AppClient(token=token)
     try:
         data = client._request("get", "/sys/balance")
+    except _TRANSIENT_EXCEPTIONS as e:
+        raise HikerAPIError(_unreachable_message(e)) from e
     except Exception as e:
         raise HikerAPIError(f"balance lookup failed: {e}") from e
     finally:
