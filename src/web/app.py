@@ -1099,7 +1099,14 @@ def set_token(req: TokenRequest, request: Request):
     try:
         balance = check_hiker_token(token)
     except OsintServiceError as e:
-        raise HTTPException(400, f"Key rejected by HikerAPI: {e}") from e
+        # "Key rejected" is only true when HikerAPI actually answered. When it
+        # could not be reached, prefixing that would announce the one
+        # conclusion the message then spends a paragraph denying - and the UI
+        # shows it verbatim under a red cross.
+        message = str(e)
+        if message.startswith("Could not reach HikerAPI"):
+            raise HTTPException(400, message) from e
+        raise HTTPException(400, f"Key rejected by HikerAPI: {message}") from e
 
     set_runtime_hiker_token(token)
     saved = False

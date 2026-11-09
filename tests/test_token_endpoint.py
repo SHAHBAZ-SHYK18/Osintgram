@@ -122,3 +122,28 @@ def test_an_opted_in_hostname_is_accepted(client, monkeypatch):
     for headers in ({"host": "attacker.example"}, {"host": "sandbox.example.evil.test"}):
         assert api.post("/api/token", json={"token": "hik_valid_key_0000"},
                         headers=headers).status_code == 403
+
+
+def test_an_unreachable_hikerapi_does_not_claim_the_key_was_rejected(client):
+    """The UI shows this text verbatim under a red cross, so saying 'Key
+    rejected' when HikerAPI never answered is actively misleading."""
+    api, _ = client
+    import src.web.app as appmod
+    orig = appmod.check_hiker_token
+    appmod.check_hiker_token = lambda token: (_ for _ in ()).throw(
+        svcmod.HikerAPIError("Could not reach HikerAPI (ConnectError: EOF). This is a network problem."))
+    try:
+        r = api.post("/api/token", json={"token": "hik_valid_key_0000"})
+    finally:
+        appmod.check_hiker_token = orig
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert detail.startswith("Could not reach HikerAPI")
+    assert "rejected" not in detail.lower()
+
+
+def test_a_key_hikerapi_actually_refuses_still_says_rejected(client):
+    api, _ = client
+    r = api.post("/api/token", json={"token": "definitely_wrong"})
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Key rejected by HikerAPI: 401 Unauthorized"
