@@ -85,11 +85,22 @@ any card with media in it offers a one-click zip of the originals.
 ## Quick start
 
 ```bash
-pip install -r requirements.txt
-uvicorn src.web.app:app --host 127.0.0.1 --port 8000 --reload   # or: make run
+./run.sh
 ```
 
-Open **<http://127.0.0.1:8000>**.
+That's it: it finds a Python 3.10+, builds a virtual environment in `.venv/`,
+installs the dependencies (once — it skips the install on later runs), and
+serves the page. Open **<http://127.0.0.1:8000>**.
+
+```bash
+./run.sh --port 9000     # somewhere else
+./run.sh --reload        # development: restart on code changes
+./run.sh --check         # set up and verify, then exit
+./run.sh --lan           # reachable from your network — see the warning
+```
+
+Prefer to do it by hand? `pip install -r requirements.txt` then
+`uvicorn src.web.app:app --host 127.0.0.1 --port 8000` — or `make run`.
 
 You need a data backend. The page opens on a panel where you can paste a
 [HikerAPI](https://hikerapi.com) key directly — it's verified before it's

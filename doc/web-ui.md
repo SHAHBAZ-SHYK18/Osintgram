@@ -48,7 +48,32 @@ step 2.3 and use Base mode — every command is available there.
 ### 2.1 Install
 
 ```bash
+./run.sh
+```
+
+One command, from a fresh clone to a running page. It looks for Python 3.10+,
+creates `.venv/` beside the code, installs `requirements.txt` into it, checks
+the imports actually resolve, creates `config/credentials.ini` if it's missing,
+and starts the server on `127.0.0.1:8000`.
+
+Run it again whenever you like. It reuses the environment it made and skips the
+install unless `requirements.txt` changes; if the folder was moved or copied
+from another machine (which breaks the venv), it notices and rebuilds it.
+
+| Option | What it does |
+|---|---|
+| `--port 9000` / `--port=9000` | Serve on another port |
+| `--host 0.0.0.0` | Bind elsewhere (you almost certainly want `--lan` instead) |
+| `--reload` | Restart on code changes, for development |
+| `--lan` | Bind `0.0.0.0` and print the warning it deserves — the app has no authentication |
+| `--no-install` | Skip the dependency step (offline, or already set up) |
+| `--check` | Set up and verify, then exit without serving |
+
+To do it by hand instead:
+
+```bash
 pip install -r requirements.txt
+uvicorn src.web.app:app --host 127.0.0.1 --port 8000
 ```
 
 ### 2.2 Choose a data backend
