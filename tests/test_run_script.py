@@ -69,3 +69,67 @@ def test_help_works_without_starting_anything():
     assert result.returncode == 0
     assert "./run.sh" in result.stdout
     assert "--check" in result.stdout
+
+
+# ---- Windows launcher ------------------------------------------------------
+
+PS1 = Path(__file__).resolve().parent.parent / "run.ps1"
+
+
+def test_the_windows_launcher_exists():
+    assert PS1.is_file()
+    body = PS1.read_text()
+    assert "param(" in body
+    assert "uvicorn" in body
+
+
+def test_the_windows_launcher_offers_the_same_options_as_run_sh():
+    body = PS1.read_text()
+    for option in ("$Port", "$Reload", "$Check", "$NoInstall", "$BindHost"):
+        assert option in body, f"{option} missing from run.ps1"
+
+
+def test_the_windows_launcher_defaults_to_localhost_and_warns_otherwise():
+    body = PS1.read_text()
+    assert '$BindHost = "127.0.0.1"' in body
+    assert "no authentication" in body.lower()
+
+
+def test_the_windows_launcher_prefers_a_python_with_wheels():
+    """PyYAML has no 3.15 wheel; picking the newest Python would send pip off
+    to compile it and demand Visual C++ Build Tools."""
+    body = PS1.read_text()
+    assert '"3.13", "3.12", "3.11", "3.10"' in body or "3.12" in body
+    assert "Visual C++" in body
+
+
+def test_both_launchers_use_the_venv_interpreter_not_a_bare_command():
+    """`uvicorn` on PATH is the classic Windows failure: the venv isn't active.
+    Both scripts must invoke it through the venv's own python."""
+    assert '-m", "uvicorn"' in PS1.read_text() or '"-m", "uvicorn"' in PS1.read_text()
+    sh = SCRIPT.read_text()
+    assert '"$VPY" -m uvicorn' in sh
+
+
+# ---- requirements must stay installable as Python moves on -----------------
+
+REQUIREMENTS = Path(__file__).resolve().parent.parent / "requirements.txt"
+
+
+def test_optional_uvicorn_extras_are_gated_on_the_python_version():
+    """uvicorn[standard] pulls PyYAML, which has no wheel for 3.15+ - an
+    unguarded extra turns a routine install into a compiler error."""
+    body = REQUIREMENTS.read_text()
+    assert re.search(r'uvicorn\[standard\].*python_version\s*<\s*"3\.15"', body)
+    assert re.search(r'(?m)^uvicorn>=[\d.]+;\s*python_version\s*>=\s*"3\.15"', body)
+
+
+def test_the_tools_that_fail_without_a_compiler_are_truly_optional():
+    """If the app ever imports pyyaml itself, the gate above stops being safe."""
+    root = Path(__file__).resolve().parent.parent
+    imports = [
+        line for path in (root / "src").rglob("*.py")
+        for line in path.read_text().splitlines()
+        if re.match(r"\s*(import yaml|from yaml)", line)
+    ]
+    assert imports == [], "src/ now imports yaml - it is no longer an optional extra"

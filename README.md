@@ -99,6 +99,17 @@ serves the page. Open **<http://127.0.0.1:8000>**.
 ./run.sh --lan           # reachable from your network — see the warning
 ```
 
+**On Windows**, use `run.ps1` instead — same options (`-Port`, `-Reload`,
+`-Check`, `-NoInstall`):
+
+```powershell
+.\run.ps1
+```
+
+Both scripts pick a Python that every dependency has prebuilt wheels for
+(3.12/3.13 when available), because a brand-new CPython like 3.15 has no PyYAML
+wheel yet and pip would try to compile it.
+
 Prefer to do it by hand? `pip install -r requirements.txt` then
 `uvicorn src.web.app:app --host 127.0.0.1 --port 8000` — or `make run`.
 

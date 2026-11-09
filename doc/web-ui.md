@@ -69,6 +69,16 @@ from another machine (which breaks the venv), it notices and rebuilds it.
 | `--no-install` | Skip the dependency step (offline, or already set up) |
 | `--check` | Set up and verify, then exit without serving |
 
+**On Windows** there is a PowerShell equivalent, with the same options:
+
+```powershell
+.\run.ps1                 # -Port 9000, -Reload, -Check, -NoInstall
+```
+
+If PowerShell refuses to run it, allow local scripts once:
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` — or bypass it for one
+run: `powershell -ExecutionPolicy Bypass -File .\run.ps1`.
+
 To do it by hand instead:
 
 ```bash
@@ -606,6 +616,30 @@ anyone who can reach the hostname.
 ---
 
 ## 10. Troubleshooting
+
+**`error: Microsoft Visual C++ 14.0 or greater is required` / `Failed building
+wheel for pyyaml`** — Python 3.15 is newer than PyYAML's prebuilt wheels, so pip
+fell back to compiling it from source and there's no compiler. This is not a
+problem with the app: nothing here imports PyYAML (it only arrives as an
+optional extra of `uvicorn[standard]`), and `requirements.txt` now asks for the
+extras only on Python below 3.15.
+
+Fix it with either:
+
+- **Use Python 3.12 or 3.13** (recommended, and what `run.sh`/`run.ps1` pick
+  when they're installed). On Windows: `py -3.12 -m venv .venv` — or just
+  `py -3.12 run.ps1`.
+- **Keep 3.15** and install without the extras:
+  `pip install fastapi uvicorn hikerapi instagrapi ollama geopy`
+  (verified: the app serves fine without them; you only lose some speed).
+- Installing **Microsoft C++ Build Tools** also works, but takes longer than
+  either of the above.
+
+**`uvicorn : The term 'uvicorn' is not recognized`** — the virtual environment
+isn't active in that terminal, or the install failed (see the line above). Run
+`.venv\Scripts\activate` first on Windows (`.venv/bin/activate` elsewhere), or
+skip it and use `python -m uvicorn src.web.app:app --host 127.0.0.1 --port 8000`
+— that uses the venv's interpreter directly. `run.ps1` / `run.sh` do this for you.
 
 **"A target username is required"** — a selected command needs an account. Either
 type one, or select only the hashtag/place searches.

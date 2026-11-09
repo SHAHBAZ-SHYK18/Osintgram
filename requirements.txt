@@ -1,6 +1,14 @@
 # Web app
 fastapi>=0.110
-uvicorn[standard]>=0.27
+# uvicorn[standard] adds uvloop/httptools/websockets/watchfiles/pyyaml - none of
+# which this app imports. They're faster, so they're wanted everywhere they
+# install cleanly. On Python 3.15+ PyYAML has no prebuilt wheel yet, and pip
+# then tries to compile it, which fails without Microsoft Visual C++ Build
+# Tools ("error: Microsoft Visual C++ 14.0 or greater is required"). Plain
+# uvicorn serves this app perfectly (verified), so ask for the extras only
+# where they resolve.
+uvicorn[standard]>=0.27; python_version < "3.15"
+uvicorn>=0.27; python_version >= "3.15"
 
 # Instagram data backends (either one is enough - see doc/web-ui.md)
 hikerapi==1.8.1

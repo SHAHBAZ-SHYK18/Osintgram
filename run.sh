@@ -42,16 +42,31 @@ say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
-# ---- 1. Python 3.10+ -------------------------------------------------------
+# ---- 1. A Python that has wheels for everything ----------------------------
+# 3.10 is the floor, but newer is not automatically better: prebuilt wheels
+# lag behind brand-new CPython releases, and without one pip tries to compile
+# from source - which needs a C compiler. On Python 3.15 there is no PyYAML
+# wheel yet, so the install dies with "Microsoft Visual C++ 14.0 is required"
+# (see doc/web-ui.md, Troubleshooting). Prefer a version known to be covered,
+# and say so plainly rather than failing later.
 PY=""
-for candidate in python3.13 python3.12 python3.11 python3.10 python3 python; do
+for candidate in python3.13 python3.12 python3.11 python3.10 python3.14 python3 python; do
   if command -v "$candidate" >/dev/null 2>&1 &&
      "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
     PY="$candidate"; break
   fi
 done
-[ -n "$PY" ] || die "Python 3.10+ not found. Install it (python.org or your package manager) and run again."
+[ -n "$PY" ] || die "Python 3.10+ not found. Install it from python.org and run again."
 say "Using $($PY --version) ($(command -v "$PY"))"
+
+if "$PY" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 15) else 1)' 2>/dev/null; then
+  warn "Python $($PY -c 'import platform; print(platform.python_version())') is very new and some"
+  warn "dependencies have no prebuilt wheel for it yet - pip may try to compile them,"
+  warn "which needs Microsoft Visual C++ Build Tools. If the install fails, use 3.12/3.13."
+fi
+
+# 3.15+ needs the interpreter's own version of "python -m venv" too, so the
+# venv is created from $PY either way; nothing else to branch on here.
 
 # ---- 2. Virtual environment ------------------------------------------------
 VENV=.venv
