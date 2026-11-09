@@ -114,6 +114,53 @@ def resolve_lmstudio_model(host: Optional[str] = None) -> str:
     return "local-model"
 
 
+def _lmstudio_is_listening() -> bool:
+    """Is an OpenAI-compatible server answering on the LM Studio endpoint?
+
+    Used only to explain a failure: resolve_llm_backend() deliberately ignores
+    LM Studio unless LMSTUDIO_HOST/OPENAI_BASE_URL is set, so an Ollama-less
+    machine with LM Studio already running would otherwise just be told to
+    install Ollama, with no hint that the server it has is usable. Cheap
+    (0.5 s cap) and never raises.
+    """
+    try:
+        with httpx.Client(timeout=0.5) as c:
+            return c.get(f"{resolve_lmstudio_host().rstrip('/')}/models").status_code == 200
+    except Exception:
+        return False
+
+
+def _llm_unreachable_detail(error) -> str:
+    """Explain a dead model server, naming the backend actually selected.
+
+    Reporting "Cannot reach LM Studio" when LLM_BACKEND=ollama (or when only
+    Ollama is installed) sends the user to fix something they aren't using.
+    The ollama client surfaces a refused connection as httpx.ConnectError for
+    streamed chat and as a bare ConnectionError elsewhere - one message covers
+    both, since the cause is the same.
+    """
+    if resolve_llm_backend() == "lmstudio":
+        return (
+            f"Cannot reach LM Studio at {resolve_lmstudio_host()}: {error}. Make sure LM Studio "
+            f"is running and its local server is started (default port 1234)."
+        )
+    detail = (
+        f"Cannot reach Ollama at {os.getenv('OLLAMA_HOST', 'http://127.0.0.1:11434')}: {error}. "
+        f"Make sure it is running (`ollama serve`) and the model is pulled "
+        f"(`ollama pull {OLLAMA_MODEL}`). "
+    )
+    # LM Studio is only auto-detected when LMSTUDIO_HOST is set, so a machine
+    # with it running and LLM_BACKEND unset would otherwise be told to install
+    # Ollama, with no hint that the server it already has is usable.
+    if _lmstudio_is_listening():
+        return detail + (
+            f"An OpenAI-compatible server does answer on {resolve_lmstudio_host()}, but AI mode "
+            "only uses it when LLM_BACKEND=lmstudio or LMSTUDIO_HOST is set - restart the server "
+            "with one of those, or use Base mode."
+        )
+    return detail + "Base mode works without any model."
+
+
 def resolve_llm_backend() -> str:
     """Determine whether to use 'lmstudio' (OpenAI-compatible) or 'ollama'."""
     backend = (os.getenv("LLM_BACKEND") or "").lower()
@@ -825,13 +872,7 @@ def _run_safe_events(make_events: Callable[[Callable[[dict], None]], Iterator[di
         except QueryCancelledError:
             pass  # the user stopped the search - nothing left to report
         except (httpx.ConnectError, httpx.ConnectTimeout) as e:
-            q.put({
-                "type": "error",
-                "detail": (
-                    f"Cannot reach LM Studio at {resolve_lmstudio_host()}: {e}. Make sure LM Studio "
-                    f"is running and the local server is started (default port 1234)."
-                ),
-            })
+            q.put({"type": "error", "detail": _llm_unreachable_detail(e)})
         except httpx.HTTPStatusError as e:
             q.put({
                 "type": "error",
@@ -840,14 +881,9 @@ def _run_safe_events(make_events: Callable[[Callable[[dict], None]], Iterator[di
         except httpx.HTTPError as e:
             q.put({"type": "error", "detail": f"LM Studio communication error: {e}"})
         except ConnectionError as e:
-            q.put({
-                "type": "error",
-                "detail": (
-                    f"Cannot reach LLM service: {e}. If using Ollama, make sure it is running "
-                    f"(`ollama serve`) and that the model has been pulled (`ollama pull {OLLAMA_MODEL}`). "
-                    f"If using LM Studio, ensure the local server is running at {resolve_lmstudio_host()}."
-                ),
-            })
+            # The ollama client can raise a bare builtin ConnectionError too,
+            # depending on how far the request got - same message either way.
+            q.put({"type": "error", "detail": _llm_unreachable_detail(e)})
         except Exception as e:
             if ollama and isinstance(e, getattr(ollama, "ResponseError", ())):
                 q.put({"type": "error", "detail": f"Ollama error: {e}"})

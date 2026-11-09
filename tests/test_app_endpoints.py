@@ -4,6 +4,7 @@ import json
 import time
 import types
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -384,3 +385,33 @@ def test_the_answer_is_streamed_piece_by_piece(client, monkeypatch):
     assert len(deltas) > 1, "the answer arrived in one lump"
     # Whatever the split, the pieces must rebuild the answer exactly.
     assert "".join(deltas) == final[-1] == "they post mostly at night"
+
+
+def test_an_unreachable_model_server_names_the_backend_that_is_selected(monkeypatch):
+    """The default is Ollama; telling an Ollama user to start LM Studio sends
+    them to fix a program they never installed."""
+    monkeypatch.setenv("LLM_BACKEND", "ollama")
+    monkeypatch.setenv("LMSTUDIO_HOST", "")
+    monkeypatch.setattr(appmod, "_lmstudio_is_listening", lambda: False)
+    detail = appmod._llm_unreachable_detail(httpx.ConnectError("Connection refused"))
+    assert detail.startswith("Cannot reach Ollama at http://127.0.0.1:11434")
+    assert "ollama serve" in detail and "ollama pull" in detail
+    assert "LM Studio" not in detail
+    assert "Base mode works" in detail
+
+
+def test_the_lmstudio_message_is_kept_when_that_backend_is_selected(monkeypatch):
+    monkeypatch.setenv("LLM_BACKEND", "lmstudio")
+    detail = appmod._llm_unreachable_detail(httpx.ConnectError("Connection refused"))
+    assert "Cannot reach LM Studio" in detail and "port 1234" in detail
+    assert "ollama serve" not in detail
+
+
+def test_a_running_lmstudio_is_pointed_out_when_ollama_is_selected(monkeypatch):
+    """Otherwise a user with LM Studio already up is told to install Ollama,
+    with no hint that the server they have answers on the default port."""
+    monkeypatch.setenv("LLM_BACKEND", "ollama")
+    monkeypatch.setattr(appmod, "_lmstudio_is_listening", lambda: True)
+    detail = appmod._llm_unreachable_detail(httpx.ConnectError("Connection refused"))
+    assert "An OpenAI-compatible server does answer on" in detail
+    assert "LLM_BACKEND=lmstudio" in detail

@@ -124,6 +124,12 @@ Setup for both backends, every command with its parameters and cost, how to
 keep spending down, exporting and sharing results, all configuration options,
 and troubleshooting.
 
+### 🔌 [Drive it from a script → `doc/api.md`](doc/api.md)
+
+The page is built on a plain HTTP API you can call yourself — set the key,
+price a run, execute commands, stream the progress, cancel it, save the result.
+Step-by-step with curl, plus a complete example script.
+
 ---
 
 ## Before you use it
