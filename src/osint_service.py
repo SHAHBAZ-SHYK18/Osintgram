@@ -1387,6 +1387,34 @@ class OsintgramService:
         )
 
 
+# HikerAPI keys are ASCII: letters, digits and a few punctuation characters.
+# Anything else in a "key" is either a paste accident or - as happened when a
+# browser's error text got submitted as one - a string that cannot even become
+# an HTTP header. httpx raises UnicodeEncodeError out of Client(...) itself in
+# that case, before any request is attempted, which surfaces as a bare 500.
+_ASCII_KEY = re.compile(r"[\x21-\x7e]+")
+
+
+def _clean_token(token) -> str:
+    """The key if it could plausibly be one; raise HikerAPIError otherwise.
+
+    Rejects non-ASCII and whitespace-bearing values with a message that says
+    what a key looks like, instead of letting an encoding error escape as a
+    500 with no explanation.
+    """
+    value = (token or "").strip()
+    if not value:
+        raise HikerAPIError("Paste a HikerAPI key (it looks like a long token of letters and digits).")
+    if not _ASCII_KEY.fullmatch(value):
+        # Never echo the value back: it is a credential, however malformed.
+        raise HikerAPIError(
+            "That does not look like a HikerAPI key: it contains spaces, symbols or characters "
+            "outside ASCII. Copy the key itself from your HikerAPI dashboard, not the page text "
+            "around it."
+        )
+    return value
+
+
 def check_hiker_token(token: str) -> dict:
     """Verify a token by asking HikerAPI for its own balance.
 
@@ -1395,7 +1423,8 @@ def check_hiker_token(token: str) -> dict:
     actually want to know right after pasting it. Raises HikerAPIError with
     HikerAPI's own message when the key is rejected.
     """
-    client = AppClient(token=(token or "").strip())
+    token = _clean_token(token)
+    client = AppClient(token=token)
     try:
         data = client._request("get", "/sys/balance")
     except _TRANSIENT_EXCEPTIONS as e:
@@ -1428,6 +1457,7 @@ def hiker_balance() -> Optional[dict]:
     token = resolve_hiker_token()
     if not token:
         return None
+    token = _clean_token(token)  # a malformed saved key must not crash the header
     client = AppClient(token=token)
     try:
         data = client._request("get", "/sys/balance")
@@ -1460,7 +1490,7 @@ def build_service(target: str, backend: Optional[str] = None) -> OsintgramServic
                 "HikerAPI selected but no token configured: set HIKERAPI_TOKEN or "
                 "config/credentials.ini's [Credentials] hikerapi_token"
             )
-        return OsintgramService(target, AppClient(token=token))
+        return OsintgramService(target, AppClient(token=_clean_token(token)))
 
     if backend in ("instagrapi", None):
         from src.instagrapi_backend import (

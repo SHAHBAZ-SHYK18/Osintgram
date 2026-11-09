@@ -147,3 +147,51 @@ def test_a_key_hikerapi_actually_refuses_still_says_rejected(client):
     r = api.post("/api/token", json={"token": "definitely_wrong"})
     assert r.status_code == 400
     assert r.json()["detail"] == "Key rejected by HikerAPI: 401 Unauthorized"
+
+
+# ---- a malformed "key" must not become a 500 ---------------------------------
+# Reported from the UI as: "✗ Unexpected token 'I', "Internal S"... is not valid
+# JSON" - because a non-ASCII key reached httpx as an HTTP header value.
+
+@pytest.mark.parametrize("pasted", [
+    "✗ Key rejected by HikerAPI",      # the browser's own error text
+    "hik key with spaces",
+    "sk-ℓocal-key",                    # non-ASCII lookalike
+])
+def test_a_malformed_key_is_rejected_with_an_explanation(client, monkeypatch, pasted):
+    api, creds = client
+    # The fixture stubs check_hiker_token; restore the real one so the
+    # validation under test actually runs (malformed input never reaches the
+    # network, so this stays hermetic).
+    monkeypatch.setattr(appmod, "check_hiker_token", svcmod.check_hiker_token)
+    r = api.post("/api/token", json={"token": pasted, "remember": True})
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "does not look like a HikerAPI key" in detail
+    # Nothing was written (no file at all is the ideal outcome), and the bad
+    # value is never echoed back.
+    assert pasted not in detail
+    assert not creds.exists() or pasted not in creds.read_text()
+
+
+def test_an_empty_key_asks_for_one(client):
+    api, _ = client
+    r = api.post("/api/token", json={"token": "   "})
+    assert r.status_code == 400
+    assert "Paste a HikerAPI key" in r.json()["detail"]
+
+
+def test_an_unexpected_server_error_still_answers_json(client, monkeypatch):
+    """Whatever breaks, the page must be able to parse the reply: a bare
+    'Internal Server Error' in text/plain is what produced the confusing
+    'Unexpected token' message in the browser."""
+    _, _ = client
+    monkeypatch.setattr(appmod, "check_hiker_token", lambda token: (_ for _ in ()).throw(RuntimeError("boom")))
+    # raise_server_exceptions=False: without it TestClient re-raises instead of
+    # handing back the 500 the browser would actually receive.
+    api = TestClient(appmod.app, base_url="http://127.0.0.1:8000", raise_server_exceptions=False)
+    r = api.post("/api/token", json={"token": "hik_valid_key_0000"})
+    assert r.status_code == 500
+    assert r.headers["content-type"].startswith("application/json")
+    assert "Unexpected server error" in r.json()["detail"]
+    assert "boom" in r.json()["detail"]

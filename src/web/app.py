@@ -28,8 +28,10 @@ try:
 except ImportError:
     ollama = None
 
+import traceback
+
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -262,6 +264,26 @@ def _run_tool_call(name: str, args: dict, fn) -> str:
 
 
 app = FastAPI(title="Osintgram Web")
+
+
+@app.exception_handler(Exception)
+async def _unhandled_error_is_json(request: Request, exc: Exception) -> JSONResponse:
+    """Every /api answer must be JSON, including a crash.
+
+    Starlette's default for an uncaught exception is a bare "Internal Server
+    Error" as text/plain, which the page then tries to parse as JSON - so the
+    user sees `Unexpected token 'I', "Internal S"...` and learns nothing about
+    what went wrong. Returning the real reason as JSON both fixes the parsing
+    and tells the user something actionable.
+    """
+    # Logged in full for the terminal, truncated for the response: a
+    # traceback is useful, but not as a wall of text in a status line.
+    traceback.print_exception(type(exc), exc, exc.__traceback__)
+    detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+    return JSONResponse(status_code=500, content={"detail": f"Unexpected server error — {detail:.300}"})
+
+
+
 
 # The app is meant for 127.0.0.1 and has no login, which is fine for a tool
 # you run on your own machine - but "local" is exactly what a DNS-rebinding
