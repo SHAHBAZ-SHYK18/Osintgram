@@ -41,6 +41,22 @@ class HikerAPIError(OsintServiceError):
     """HikerAPI returned an error or the request failed."""
 
 
+class HikerAPIUnreachableError(HikerAPIError):
+    """HikerAPI could not be reached at all - no verdict on the key.
+
+    A subclass so every existing caller that catches HikerAPIError keeps
+    working; the distinction only matters where a message would otherwise
+    blame the key for a network failure.
+    """
+
+
+class HikerAPIKeyFormatError(HikerAPIError):
+    """The value offered as a key cannot be one (non-ASCII, spaces, empty).
+
+    Same idea: it is not a rejected key, because HikerAPI never saw it.
+    """
+
+
 class QueryCancelledError(Exception):
     """The user stopped the search (see _CountingApiProxy.cancelled).
 
@@ -1404,10 +1420,11 @@ def _clean_token(token) -> str:
     """
     value = (token or "").strip()
     if not value:
-        raise HikerAPIError("Paste a HikerAPI key (it looks like a long token of letters and digits).")
+        raise HikerAPIKeyFormatError(
+            "Paste a HikerAPI key (it looks like a long token of letters and digits).")
     if not _ASCII_KEY.fullmatch(value):
         # Never echo the value back: it is a credential, however malformed.
-        raise HikerAPIError(
+        raise HikerAPIKeyFormatError(
             "That does not look like a HikerAPI key: it contains spaces, symbols or characters "
             "outside ASCII. Copy the key itself from your HikerAPI dashboard, not the page text "
             "around it."
@@ -1428,7 +1445,7 @@ def check_hiker_token(token: str) -> dict:
     try:
         data = client._request("get", "/sys/balance")
     except _TRANSIENT_EXCEPTIONS as e:
-        raise HikerAPIError(_unreachable_message(e)) from e
+        raise HikerAPIUnreachableError(_unreachable_message(e)) from e
     except Exception as e:
         raise HikerAPIError(str(e)) from e
     finally:
@@ -1462,7 +1479,7 @@ def hiker_balance() -> Optional[dict]:
     try:
         data = client._request("get", "/sys/balance")
     except _TRANSIENT_EXCEPTIONS as e:
-        raise HikerAPIError(_unreachable_message(e)) from e
+        raise HikerAPIUnreachableError(_unreachable_message(e)) from e
     except Exception as e:
         raise HikerAPIError(f"balance lookup failed: {e}") from e
     finally:

@@ -37,6 +37,8 @@ from pydantic import BaseModel, Field
 
 from src import artwork
 from src.osint_service import (
+    HikerAPIKeyFormatError,
+    HikerAPIUnreachableError,
     OsintgramService,
     OsintServiceError,
     QueryCancelledError,
@@ -1120,15 +1122,14 @@ def set_token(req: TokenRequest, request: Request):
         raise HTTPException(400, "Paste a HikerAPI key.")
     try:
         balance = check_hiker_token(token)
+    except (HikerAPIUnreachableError, HikerAPIKeyFormatError) as e:
+        # "Key rejected" is only true when HikerAPI actually answered and
+        # refused the key. Prefixing it onto a network failure announces the
+        # one conclusion the message then spends a paragraph denying - and the
+        # UI shows this text verbatim under a red cross.
+        raise HTTPException(400, str(e)) from e
     except OsintServiceError as e:
-        # "Key rejected" is only true when HikerAPI actually answered. When it
-        # could not be reached, prefixing that would announce the one
-        # conclusion the message then spends a paragraph denying - and the UI
-        # shows it verbatim under a red cross.
-        message = str(e)
-        if message.startswith("Could not reach HikerAPI"):
-            raise HTTPException(400, message) from e
-        raise HTTPException(400, f"Key rejected by HikerAPI: {message}") from e
+        raise HTTPException(400, f"Key rejected by HikerAPI: {e}") from e
 
     set_runtime_hiker_token(token)
     saved = False

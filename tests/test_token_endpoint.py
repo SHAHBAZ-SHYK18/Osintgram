@@ -131,7 +131,8 @@ def test_an_unreachable_hikerapi_does_not_claim_the_key_was_rejected(client):
     import src.web.app as appmod
     orig = appmod.check_hiker_token
     appmod.check_hiker_token = lambda token: (_ for _ in ()).throw(
-        svcmod.HikerAPIError("Could not reach HikerAPI (ConnectError: EOF). This is a network problem."))
+        svcmod.HikerAPIUnreachableError(
+            "Could not reach HikerAPI (ConnectError: EOF). This is a network problem."))
     try:
         r = api.post("/api/token", json={"token": "hik_valid_key_0000"})
     finally:
@@ -195,3 +196,14 @@ def test_an_unexpected_server_error_still_answers_json(client, monkeypatch):
     assert r.headers["content-type"].startswith("application/json")
     assert "Unexpected server error" in r.json()["detail"]
     assert "boom" in r.json()["detail"]
+
+
+def test_a_malformed_key_is_never_called_rejected(client, monkeypatch):
+    """It never reached HikerAPI, so nothing rejected it."""
+    api, _ = client
+    monkeypatch.setattr(appmod, "check_hiker_token", svcmod.check_hiker_token)
+    r = api.post("/api/token", json={"token": "✗ Key rejected by HikerAPI"})
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert detail.startswith("That does not look like a HikerAPI key")
+    assert "Key rejected by HikerAPI:" not in detail
