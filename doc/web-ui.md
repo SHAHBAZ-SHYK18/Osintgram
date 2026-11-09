@@ -521,11 +521,17 @@ All optional; everything has a working default.
 | Variable | Default | What it does |
 |---|---|---|
 | `HIKERAPI_TOKEN` | — | HikerAPI key. Wins over the UI and the config file |
+| `HIKERAPI_HOST` | `api.hikerapi.com` | Alternative HikerAPI API host. Read by the hikerapi client itself |
 | `INSTAGRAM_BACKEND` | auto | Force `hikerapi` or `instagrapi` |
 | `INSTAGRAM_USERNAME` / `INSTAGRAM_PASSWORD` | — | instagrapi credentials |
 
 Auto-selection prefers HikerAPI when a key is configured, and falls back to
 instagrapi when a saved session exists.
+
+If you use the hikerapi **library** directly (not through this app), a key is
+`Client(token="…")` or `HIKERAPI_TOKEN` in the environment; the client sends it
+as the `x-access-key` header to `https://api.hikerapi.com`. Without either,
+`Client()` fails at construction with *"Token not found"*.
 
 ### Host allowlist
 
